@@ -29,24 +29,75 @@ def session_page(session_id):
 def forward_request_to_redirect_url(redirect_url, request_data):
     """Forward the captured request data to the redirect URL"""
     try:
-        # Prepare the data to forward
-        forward_data = {
-            'original_request': request_data,
-            'forwarded_at': datetime.now().isoformat()
-        }
+        # Get the original method from request data
+        original_method = request_data.get('method', 'POST').upper()
         
-        # Send POST request to redirect URL
-        response = http_requests.post(
-            redirect_url,
-            json=forward_data,
-            headers={'Content-Type': 'application/json'},
-            timeout=10
-        )
+        # Get original headers (excluding some that shouldn't be forwarded)
+        original_headers = request_data.get('headers', {})
+        headers = {}
+        for key, value in original_headers.items():
+            # Skip headers that shouldn't be forwarded
+            if key.lower() not in ['host', 'content-length', 'connection', 'accept-encoding']:
+                headers[key] = value
+        
+        # Send request with the same method as the original
+        if original_method == 'GET':
+            # For GET requests, forward original query parameters
+            original_query_params = request_data.get('query_params', {})
+            response = http_requests.get(
+                redirect_url,
+                params=original_query_params,
+                headers=headers,
+                timeout=10
+            )
+        elif original_method == 'PUT':
+            # Forward original payload
+            original_payload = request_data.get('payload', {})
+            response = http_requests.put(
+                redirect_url,
+                json=original_payload if isinstance(original_payload, dict) else original_payload,
+                headers=headers,
+                timeout=10
+            )
+        elif original_method == 'DELETE':
+            # Forward original payload
+            original_payload = request_data.get('payload', {})
+            response = http_requests.delete(
+                redirect_url,
+                json=original_payload if isinstance(original_payload, dict) else original_payload,
+                headers=headers,
+                timeout=10
+            )
+        elif original_method == 'PATCH':
+            # Forward original payload
+            original_payload = request_data.get('payload', {})
+            response = http_requests.patch(
+                redirect_url,
+                json=original_payload if isinstance(original_payload, dict) else original_payload,
+                headers=headers,
+                timeout=10
+            )
+        elif original_method == 'OPTIONS':
+            response = http_requests.options(
+                redirect_url,
+                headers=headers,
+                timeout=10
+            )
+        else:
+            # Default to POST - forward original payload
+            original_payload = request_data.get('payload', {})
+            response = http_requests.post(
+                redirect_url,
+                json=original_payload if isinstance(original_payload, dict) else original_payload,
+                headers=headers,
+                timeout=10
+            )
         
         return {
             'status_code': response.status_code,
             'response_text': response.text[:500],  # Limit response text
-            'success': response.status_code < 400
+            'success': response.status_code < 400,
+            'method_used': original_method
         }
     except Exception as e:
         return {
