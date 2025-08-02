@@ -106,7 +106,6 @@ window.addEventListener('blur', () => {
 
 function resetTabTitle() {
     document.title = originalTitle;
-    currentNotificationCount = 0;
 }
 
 
@@ -1047,8 +1046,6 @@ function App() {
         setSelectedSessionId(sessionId);
         setSelectedSessionName(sessionName);
         setCurrentView('session-detail');
-        // Clear notification count when switching sessions
-        clearNotificationCount();
     };
     
     const handleBackToSessions = (newSessionId = null) => {
@@ -1064,7 +1061,6 @@ function App() {
             setSelectedSessionId(null);
             setSelectedSessionName(null);
             resetTabTitle();
-            clearNotificationCount();
             // Update URL to home page
             window.history.pushState({}, '', '/');
         }
