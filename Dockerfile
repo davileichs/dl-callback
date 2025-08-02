@@ -23,17 +23,17 @@ RUN useradd -m -u 1000 webhook && \
     chown -R webhook:webhook /app
 USER webhook
 
-# Expose port 5001
-EXPOSE 5001
+# Expose port 5000
+EXPOSE 5000
 
 # Set environment variables
 ENV FLASK_APP=webhook.py
 ENV FLASK_ENV=production
-ENV PORT=5001
+ENV PORT=5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5001/ || exit 1
+    CMD curl -f http://localhost:5000/ || exit 1
 
 # Run the application
 CMD ["python", "webhook.py"] 
