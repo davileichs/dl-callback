@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  webhook-app:
+    build: .
+    container_name: webhook-callback-viewer
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=production
+      - PORT=5001
+      - SECRET_KEY=your-secret-key-change-in-production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - webhook_data:/app/data
+    networks:
+      - webhook-network
+
+volumes:
+  webhook_data:
+    driver: local
+
+networks:
+  webhook-network:
+    driver: bridge 

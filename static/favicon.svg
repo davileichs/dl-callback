@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Background circle -->
+  <circle cx="16" cy="16" r="15" fill="#00d4ff" stroke="#055a64" stroke-width="2"/>
+  
+  <!-- Webhook/API symbol -->
+  <path d="M8 12 L16 8 L24 12 L24 20 L16 24 L8 20 Z" fill="#033a42" stroke="#ffffff" stroke-width="1"/>
+  
+  <!-- Arrow indicating webhook flow -->
+  <path d="M12 16 L20 16 M18 14 L20 16 L18 18" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Small dots representing data -->
+  <circle cx="14" cy="14" r="1" fill="#ffffff"/>
+  <circle cx="18" cy="18" r="1" fill="#ffffff"/>
+  <circle cx="14" cy="18" r="1" fill="#ffffff"/>
+  <circle cx="18" cy="14" r="1" fill="#ffffff"/>
+</svg> 

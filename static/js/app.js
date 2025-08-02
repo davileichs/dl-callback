@@ -58,13 +58,29 @@ const api = {
     async accessSession(sessionId) {
         const response = await fetch(`/api/access-session/${sessionId}`);
         return response.json();
+    },
+
+    async handleRedirect(sessionId, requestData) {
+        const response = await fetch(`/api/redirect/${sessionId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ request_data: requestData })
+        });
+        return response.json();
+    },
+
+    async getSessionRequests(sessionId) {
+        const response = await fetch(`/api/sessions/${sessionId}/requests`);
+        return response.json();
     }
 };
 
 // Tab title notification utility
 let originalTitle = document.title;
 let isPageFocused = true;
-let currentNotificationCount = 0;
+
 
 // Handle page focus/blur events
 document.addEventListener('visibilitychange', () => {
@@ -86,17 +102,14 @@ window.addEventListener('blur', () => {
     isPageFocused = false;
 });
 
-function updateTabTitle(newRequests) {
-    if (!isPageFocused && newRequests > 0) {
-        currentNotificationCount += newRequests;
-        document.title = `(${currentNotificationCount}) ${originalTitle}`;
-    }
-}
+
 
 function resetTabTitle() {
     document.title = originalTitle;
     currentNotificationCount = 0;
 }
+
+
 
 // Copy to clipboard utility
 function copyToClipboard(text) {
@@ -116,6 +129,24 @@ function showCopyFeedback() {
     setTimeout(() => {
         feedback.remove();
     }, 2000);
+}
+
+function showRedirectNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} redirect-notification`;
+    notification.textContent = message;
+    notification.style.position = 'fixed';
+    notification.style.top = '20px';
+    notification.style.right = '20px';
+    notification.style.zIndex = '9999';
+    notification.style.minWidth = '300px';
+    notification.style.maxWidth = '500px';
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 5000);
 }
 
 // Headers Viewer Component
@@ -317,14 +348,26 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
     const [allSessions, setAllSessions] = useState([]);
     const [editingName, setEditingName] = useState(false);
     const [editingNameValue, setEditingNameValue] = useState('');
+    const [requests, setRequests] = useState([]);
+    
+
+    
+
+    
     useEffect(() => {
         if (sessionId) {
             loadSession();
             loadAllSessions();
-            const interval = setInterval(loadSession, 5000); // Auto-refresh every 5 seconds
+            
+            // Simple polling for new requests every 2 seconds
+            const pollInterval = setInterval(() => {
+                if (!document.hidden) {
+                    checkForNewRequests();
+                }
+            }, 2000);
+            
             return () => {
-                clearInterval(interval);
-                resetTabTitle();
+                clearInterval(pollInterval);
             };
         }
     }, [sessionId]);
@@ -343,6 +386,9 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
             setAllSessions([]);
         }
     };
+
+    // Silent version for polling - only updates request list
+
     
     const loadSession = async () => {
         try {
@@ -356,47 +402,15 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
             }
             
             setSession(newSession);
+            setRequests(newSession.requests || []);
             setError(null);
             
-            // Check for new requests and update tab title
-            if (newSession && newSession.requests) {
-                const currentRequestCount = newSession.requests.length;
-                
-                if (isInitialLoad) {
-                    // On initial load, just set the baseline count without notifications
-                    setPreviousRequestCount(currentRequestCount);
-                    setIsInitialLoad(false);
-                    // Set the first request as selected by default
-                    if (newSession.requests.length > 0 && !selectedRequest) {
-                        setSelectedRequest(newSession.requests[0]);
-                    }
-                } else if (currentRequestCount > previousRequestCount) {
-                    // Only count truly new requests
-                    const newRequests = currentRequestCount - previousRequestCount;
-                    updateTabTitle(newRequests);
-                    setPreviousRequestCount(currentRequestCount);
-                }
-                
-                // Update selectedRequest if it's no longer in the current session data
-                if (selectedRequest && newSession.requests && newSession.requests.length > 0) {
-                    const requestStillExists = newSession.requests.some(req => 
-                        req && req.timestamp === selectedRequest.timestamp && 
-                        req.method === selectedRequest.method
-                    );
-                    
-                    if (!requestStillExists) {
-                        // Selected request no longer exists, select the first one
-                        setSelectedRequest(newSession.requests[0]);
-                    } else {
-                        // Update the selectedRequest with the fresh data
-                        const updatedSelectedRequest = newSession.requests.find(req => 
-                            req && req.timestamp === selectedRequest.timestamp && 
-                            req.method === selectedRequest.method
-                        );
-                        if (updatedSelectedRequest) {
-                            setSelectedRequest(updatedSelectedRequest);
-                        }
-                    }
+            // Set initial request count and select first request if none selected
+            if (isInitialLoad) {
+                setPreviousRequestCount(newSession.requests ? newSession.requests.length : 0);
+                setIsInitialLoad(false);
+                if (newSession.requests && newSession.requests.length > 0 && !selectedRequest) {
+                    setSelectedRequest(newSession.requests[0]);
                 }
             }
         } catch (err) {
@@ -405,6 +419,41 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
             setSession(null);
         } finally {
             setLoading(false);
+        }
+    };
+    
+    // Simple function to check for new requests and update only the left menu
+    const checkForNewRequests = async () => {
+        try {
+            const data = await api.getSessionRequests(sessionId);
+            const newRequests = data.requests || [];
+            const currentRequestCount = newRequests.length;
+            
+            // Check if there are new requests
+            if (currentRequestCount > previousRequestCount) {
+                const newRequestsCount = currentRequestCount - previousRequestCount;
+                
+
+                
+                // Update requests list (left menu only)
+                setRequests(newRequests);
+                
+                // Preserve selected request by updating it with the new reference
+                if (selectedRequest) {
+                    const updatedSelectedRequest = newRequests.find(req => 
+                        req && req.timestamp === selectedRequest.timestamp && 
+                        req.method === selectedRequest.method
+                    );
+                    if (updatedSelectedRequest) {
+                        setSelectedRequest(updatedSelectedRequest);
+                    }
+                }
+                
+                // Update request count
+                setPreviousRequestCount(currentRequestCount);
+            }
+        } catch (err) {
+            console.error('Error checking for new requests:', err);
         }
     };
     
@@ -520,13 +569,15 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
                                 </h5>
                             )}
                             <small className="text-muted">
-                                {(session.requests || []).length} requests • Created {new Date(session.created_at).toLocaleDateString()}
+                                {(requests || []).length} requests • Created {new Date(session.created_at).toLocaleDateString()}
                             </small>
                         </div>
                     </div>
-                    <button className="btn btn-danger" onClick={handleDelete}>
-                        <i className="fas fa-trash"></i> Delete Session
-                    </button>
+                    <div className="d-flex gap-2">
+                        <button className="btn btn-danger" onClick={handleDelete}>
+                            <i className="fas fa-trash"></i> Delete Session
+                        </button>
+                    </div>
                 </div>
             </div>
             
@@ -587,6 +638,46 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
                                     >
                                         <i className="fas fa-save"></i>
                                     </button>
+                                    <button 
+                                        className="btn btn-outline-primary" 
+                                        type="button"
+                                        onClick={async () => {
+                                            if (!session.redirect_url) {
+                                                alert('Please set a redirect URL first');
+                                                return;
+                                            }
+                                            
+                                            if (!selectedRequest) {
+                                                alert('Please select a request to test redirect with');
+                                                return;
+                                            }
+                                            
+                                            try {
+                                                // Get redirect info from backend
+                                                const redirectInfo = await api.handleRedirect(sessionId, selectedRequest);
+                                                
+                                                if (redirectInfo.redirect_url) {
+                                                    // Use JavaScript redirect manager to forward the request
+                                                    const result = await window.redirectManager.forwardRequestToRedirectUrl(
+                                                        redirectInfo.redirect_url, 
+                                                        redirectInfo.request_data
+                                                    );
+                                                    
+                                                    if (result.success) {
+                                                        alert(`Redirect successful! Status: ${result.status_code}`);
+                                                    } else {
+                                                        alert(`Redirect failed: ${result.error || 'Unknown error'}`);
+                                                    }
+                                                }
+                                            } catch (err) {
+                                                console.error('Failed to test redirect:', err);
+                                                alert('Failed to test redirect: ' + err.message);
+                                            }
+                                        }}
+                                        disabled={!session.redirect_url || !selectedRequest}
+                                    >
+                                        <i className="fas fa-paper-plane"></i> Test
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -594,37 +685,48 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
                 </div>
             </div>
             
+
+            
             {/* Three-Panel Layout */}
             <div className="session-panels">
                 {/* Left Panel - Requests List */}
                 <div className="requests-panel">
                     <div className="panel-header">
-                        <h6 className="mb-0">Requests ({(session.requests || []).length})</h6>
+                        <h6 className="mb-0">Requests ({(requests || []).length})</h6>
                     </div>
                     <div className="requests-list">
-                        {(session.requests || []).length === 0 ? (
+                        {(requests || []).length === 0 ? (
                             <div className="empty-state">
                                 <i className="fas fa-inbox"></i>
                                 <p>No requests captured yet</p>
                             </div>
                         ) : (
-                            (session.requests || [])
+                            (requests || [])
                                 .filter(request => request && request.timestamp && request.method)
                                 .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
                                 .map((request, index) => (
                                     <div 
                                         key={index} 
-                                        className={`request-entry ${selectedRequest === request ? 'active' : ''}`}
+                                        className={`request-entry ${selectedRequest && selectedRequest.timestamp === request.timestamp && selectedRequest.method === request.method ? 'active' : ''}`}
                                         onClick={() => setSelectedRequest(request)}
                                     >
                                         <span className={`badge ${getMethodClass(request.method)}`}>
                                             {request.method}
                                         </span>
                                         <span className="request-time">
-                                            {new Date(request.timestamp).toLocaleTimeString()}
+                                            {new Date(request.timestamp).toLocaleTimeString('en-GB', { 
+                                                hour: '2-digit', 
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                                hour12: false 
+                                            })}
                                         </span>
                                         <span className="request-date">
-                                            {new Date(request.timestamp).toLocaleDateString()}
+                                            {new Date(request.timestamp).toLocaleDateString('en-GB', {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                year: 'numeric'
+                                            })}
                                         </span>
                                     </div>
                                 ))
@@ -945,6 +1047,8 @@ function App() {
         setSelectedSessionId(sessionId);
         setSelectedSessionName(sessionName);
         setCurrentView('session-detail');
+        // Clear notification count when switching sessions
+        clearNotificationCount();
     };
     
     const handleBackToSessions = (newSessionId = null) => {
@@ -960,6 +1064,7 @@ function App() {
             setSelectedSessionId(null);
             setSelectedSessionName(null);
             resetTabTitle();
+            clearNotificationCount();
             // Update URL to home page
             window.history.pushState({}, '', '/');
         }

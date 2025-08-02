@@ -1,8 +1,8 @@
-from flask import Flask, request, jsonify, render_template, session, redirect
+from flask import Flask, request, jsonify, render_template, session, redirect, send_file
 from flask_cors import CORS
 import json
 import uuid
-import requests as http_requests
+
 from datetime import datetime
 import os
 from database import DatabaseManager
@@ -21,89 +21,19 @@ def index():
     """Serve the React frontend"""
     return render_template('index.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    """Serve the favicon"""
+    return send_file('static/favicon.svg', mimetype='image/svg+xml')
+
+
+
 @app.route('/session/<session_id>')
 def session_page(session_id):
     """Redirect to home page with session ID for direct session access"""
     return redirect(f'/?session={session_id}')
 
-def forward_request_to_redirect_url(redirect_url, request_data):
-    """Forward the captured request data to the redirect URL"""
-    try:
-        # Get the original method from request data
-        original_method = request_data.get('method', 'POST').upper()
-        
-        # Get original headers (excluding some that shouldn't be forwarded)
-        original_headers = request_data.get('headers', {})
-        headers = {}
-        for key, value in original_headers.items():
-            # Skip headers that shouldn't be forwarded
-            if key.lower() not in ['host', 'content-length', 'connection', 'accept-encoding']:
-                headers[key] = value
-        
-        # Send request with the same method as the original
-        if original_method == 'GET':
-            # For GET requests, forward original query parameters
-            original_query_params = request_data.get('query_params', {})
-            response = http_requests.get(
-                redirect_url,
-                params=original_query_params,
-                headers=headers,
-                timeout=10
-            )
-        elif original_method == 'PUT':
-            # Forward original payload
-            original_payload = request_data.get('payload', {})
-            response = http_requests.put(
-                redirect_url,
-                json=original_payload if isinstance(original_payload, dict) else original_payload,
-                headers=headers,
-                timeout=10
-            )
-        elif original_method == 'DELETE':
-            # Forward original payload
-            original_payload = request_data.get('payload', {})
-            response = http_requests.delete(
-                redirect_url,
-                json=original_payload if isinstance(original_payload, dict) else original_payload,
-                headers=headers,
-                timeout=10
-            )
-        elif original_method == 'PATCH':
-            # Forward original payload
-            original_payload = request_data.get('payload', {})
-            response = http_requests.patch(
-                redirect_url,
-                json=original_payload if isinstance(original_payload, dict) else original_payload,
-                headers=headers,
-                timeout=10
-            )
-        elif original_method == 'OPTIONS':
-            response = http_requests.options(
-                redirect_url,
-                headers=headers,
-                timeout=10
-            )
-        else:
-            # Default to POST - forward original payload
-            original_payload = request_data.get('payload', {})
-            response = http_requests.post(
-                redirect_url,
-                json=original_payload if isinstance(original_payload, dict) else original_payload,
-                headers=headers,
-                timeout=10
-            )
-        
-        return {
-            'status_code': response.status_code,
-            'response_text': response.text[:500],  # Limit response text
-            'success': response.status_code < 400,
-            'method_used': original_method
-        }
-    except Exception as e:
-        return {
-            'error': str(e),
-            'success': False
-        }
+
 
 @app.route('/api/callback/<session_id>', methods=['POST', 'GET', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
 def callback_endpoint(session_id):
@@ -165,29 +95,20 @@ def callback_endpoint(session_id):
     # Get current request count
     requests = db.get_session_requests(session_id, user_id)
     
-    # Forward data to redirect URL if configured
-    redirect_response = None
-    if existing_session and existing_session.get('redirect_url'):
-        try:
-            # Forward the request to the redirect URL
-            redirect_response = forward_request_to_redirect_url(
-                existing_session['redirect_url'], 
-                request_data
-            )
-        except Exception as e:
-            print(f"Error forwarding to redirect URL: {e}")
+    # Get current user's session data to get redirect URL
+    current_user_session = db.get_session(session_id, user_id)
+    redirect_url = current_user_session.get('redirect_url', '') if current_user_session else ''
     
-    # Return success response
+    # Return success response with redirect URL for JavaScript handling
     response_data = {
         'status': 'success',
         'message': f'Callback data captured for session {session_id}',
         'session_id': session_id,
         'request_count': len(requests),
-        'share_url': f'{request.host_url.rstrip("/")}/session/{session_id}'
+        'share_url': f'{request.host_url.rstrip("/")}/session/{session_id}',
+        'redirect_url': redirect_url,
+        'request_data': request_data
     }
-    
-    if redirect_response:
-        response_data['redirect_response'] = redirect_response
     
     return jsonify(response_data), 200
 
@@ -292,6 +213,20 @@ def update_redirect_url(session_id):
         'redirect_url': redirect_url
     })
 
+@app.route('/api/sessions/<session_id>/requests', methods=['GET'])
+def get_session_requests(session_id):
+    """Get only the requests for a session (lightweight endpoint for polling)"""
+    try:
+        user_id = user_manager.get_user_id()
+        requests = db.get_session_requests(session_id, user_id)
+        
+        return jsonify({
+            'requests': requests,
+            'count': len(requests)
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/generate-session', methods=['POST'])
 def generate_session():
     """Generate a new session ID for the current user"""
@@ -339,7 +274,35 @@ def access_session(session_id):
         'message': 'Session accessed successfully'
     })
 
+@app.route('/api/redirect/<session_id>', methods=['POST'])
+def handle_redirect(session_id):
+    """Handle redirect forwarding using JavaScript"""
+    user_id = user_manager.get_user_id()
+    session_data = db.get_session(session_id, user_id)
+    
+    if not session_data:
+        return jsonify({'error': 'Session not found'}), 404
+    
+    redirect_url = session_data.get('redirect_url')
+    if not redirect_url:
+        return jsonify({'error': 'No redirect URL configured'}), 400
+    
+    # Get request data from the request body
+    data = request.get_json()
+    if not data or 'request_data' not in data:
+        return jsonify({'error': 'Request data is required'}), 400
+    
+    request_data = data['request_data']
+    
+    # Return the redirect information for JavaScript to handle
+    return jsonify({
+        'redirect_url': redirect_url,
+        'request_data': request_data,
+        'session_id': session_id
+    })
+
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000) 
+    port = int(os.environ.get('PORT', 5001))
+    app.run(debug=False, host='0.0.0.0', port=port) 

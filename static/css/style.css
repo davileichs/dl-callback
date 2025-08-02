@@ -128,6 +128,8 @@ html {
 .method-put { background-color: #ffc107; color: black; }
 .method-delete { background-color: #dc3545; color: white; }
 .method-patch { background-color: #6f42c1; color: white; }
+.method-options { background-color: #fd7e14; color: white; }
+.method-head { background-color: #20c997; color: white; }
 
 .timestamp {
     color: #b0b0b0;
@@ -163,6 +165,22 @@ html {
     top: 1rem;
     right: 1rem;
     z-index: 1050;
+}
+
+.redirect-notification {
+    animation: slideIn 0.3s ease-out;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
 .form-control {
@@ -396,11 +414,26 @@ html {
 .requests-list .request-entry .request-time {
     font-weight: 600;
     font-size: 0.8rem;
+    font-family: 'Courier New', monospace;
+    min-width: 70px;
+    display: inline-block;
+    text-align: center;
 }
 
 .requests-list .request-entry .request-date {
     font-size: 0.7rem;
     opacity: 0.8;
+    font-family: 'Courier New', monospace;
+    min-width: 80px;
+    display: inline-block;
+    text-align: center;
+}
+
+.requests-list .request-entry .badge {
+    min-width: 60px;
+    text-align: center;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
 }
 
 .request-details-content {
@@ -458,6 +491,8 @@ html {
     padding: 1rem;
     flex-shrink: 0;
 }
+
+
 
 @media (max-width: 768px) {
     .webhook-url {
