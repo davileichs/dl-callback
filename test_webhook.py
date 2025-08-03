@@ -10,7 +10,7 @@ import time
 import uuid
 
 # Configuration
-BASE_URL = "http://localhost:5001"
+BASE_URL = "http://localhost:5000"
 
 def test_webhook():
     """Test the webhook functionality"""
@@ -105,7 +105,7 @@ def test_webhook():
     # Step 3: Check session data (Note: This will only work from a browser session)
     print("\n3. Checking session data...")
     print("   ℹ️  Session data can only be accessed from a browser session")
-    print("   🌐 Open your browser and go to: http://localhost:5001")
+    print("   🌐 Open your browser and go to: http://localhost:5000")
     print("   🔍 Then navigate to the session to view the captured data")
     
     # Step 4: List all sessions (Note: This will only work from a browser session)
