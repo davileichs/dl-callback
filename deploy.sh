@@ -24,17 +24,17 @@ docker rm webhook-callback-viewer 2>/dev/null || true
 echo "🏃 Starting container..."
 docker run -d \
     --name webhook-callback-viewer \
-    -p 5001:5001 \
+    -p 5000:5000 \
     -e FLASK_ENV=production \
-    -e PORT=5001 \
+    -e PORT=5000 \
     -e SECRET_KEY=your-secret-key-change-in-production \
     --restart unless-stopped \
     webhook-callback-viewer
 
 if [ $? -eq 0 ]; then
     echo "✅ Container started successfully!"
-    echo "🌐 Application is running on: http://localhost:5001"
-    echo "📊 Health check: http://localhost:5001/"
+    echo "🌐 Application is running on: http://localhost:5000"
+    echo "📊 Health check: http://localhost:5000/"
     echo ""
     echo "📋 Container logs:"
     docker logs webhook-callback-viewer
