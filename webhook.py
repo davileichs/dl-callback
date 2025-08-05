@@ -19,7 +19,14 @@ user_manager = UserSessionManager()
 @app.route('/')
 def index():
     """Serve the React frontend"""
-    return render_template('index.html')
+    # Generate version based on file modification time
+    app_js_path = 'static/js/app.js'
+    if os.path.exists(app_js_path):
+        version = str(int(os.path.getmtime(app_js_path)))
+    else:
+        version = '1'
+    
+    return render_template('index.html', app_version=version)
 
 @app.route('/favicon.ico')
 def favicon():
@@ -78,7 +85,9 @@ def callback_endpoint(session_id):
     # Capture payload based on content type
     try:
         if request.is_json:
-            request_data['payload'] = request.get_json()
+            # Parse JSON manually to preserve key order
+            raw_data = request.get_data(as_text=True)
+            request_data['payload'] = json.loads(raw_data, object_pairs_hook=dict)
         elif request.content_type and 'form' in request.content_type:
             request_data['payload'] = dict(request.form)
         else:
@@ -99,6 +108,11 @@ def callback_endpoint(session_id):
     current_user_session = db.get_session(session_id, user_id)
     redirect_url = current_user_session.get('redirect_url', '') if current_user_session else ''
     
+    # Convert payload to JSON string to preserve key order in response
+    response_request_data = request_data.copy()
+    if 'payload' in response_request_data and isinstance(response_request_data['payload'], dict):
+        response_request_data['payload'] = json.dumps(response_request_data['payload'], separators=(',', ':'))
+    
     # Return success response with redirect URL for JavaScript handling
     response_data = {
         'status': 'success',
@@ -107,7 +121,7 @@ def callback_endpoint(session_id):
         'request_count': len(requests),
         'share_url': f'{request.host_url.rstrip("/")}/session/{session_id}',
         'redirect_url': redirect_url,
-        'request_data': request_data
+        'request_data': response_request_data
     }
     
     return jsonify(response_data), 200
@@ -142,6 +156,11 @@ def get_session(session_id):
     
     # Get requests for this session
     requests = db.get_session_requests(session_id, user_id)
+    
+    # Convert payload to JSON string to preserve key order
+    for req in requests:
+        if 'payload' in req and isinstance(req['payload'], dict):
+            req['payload'] = json.dumps(req['payload'], separators=(',', ':'))
     
     # Format session data
     session_response = {
@@ -220,6 +239,11 @@ def get_session_requests(session_id):
         user_id = user_manager.get_user_id()
         requests = db.get_session_requests(session_id, user_id)
         
+        # Convert payload to JSON string to preserve key order
+        for req in requests:
+            if 'payload' in req and isinstance(req['payload'], dict):
+                req['payload'] = json.dumps(req['payload'], separators=(',', ':'))
+        
         return jsonify({
             'requests': requests,
             'count': len(requests)
@@ -257,6 +281,11 @@ def access_session(session_id):
     # Get session data for the user
     session_data = db.get_session(session_id, user_id)
     requests = db.get_session_requests(session_id, user_id)
+    
+    # Convert payload to JSON string to preserve key order
+    for req in requests:
+        if 'payload' in req and isinstance(req['payload'], dict):
+            req['payload'] = json.dumps(req['payload'], separators=(',', ':'))
     
     # Format session data
     session_response = {

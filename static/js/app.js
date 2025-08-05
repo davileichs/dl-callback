@@ -112,17 +112,52 @@ function resetTabTitle() {
 
 // Copy to clipboard utility
 function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        showCopyFeedback();
-    });
+    // Try modern clipboard API first
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+            showCopyFeedback();
+        }).catch((err) => {
+            console.error('Clipboard API failed:', err);
+            fallbackCopyToClipboard(text);
+        });
+    } else {
+        // Fallback for older browsers or non-secure contexts
+        fallbackCopyToClipboard(text);
+    }
+}
+
+function fallbackCopyToClipboard(text) {
+    // Create a temporary textarea element
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            showCopyFeedback();
+        } else {
+            showCopyFeedback('Failed to copy', 'error');
+        }
+    } catch (err) {
+        console.error('Fallback copy failed:', err);
+        showCopyFeedback('Failed to copy', 'error');
+    }
+    
+    document.body.removeChild(textArea);
 }
 
 
 
-function showCopyFeedback() {
+function showCopyFeedback(message = 'Copied to clipboard!', type = 'success') {
     const feedback = document.createElement('div');
-    feedback.className = 'alert alert-success copy-feedback';
-    feedback.textContent = 'Copied to clipboard!';
+    feedback.className = `alert alert-${type === 'error' ? 'danger' : 'success'} copy-feedback`;
+    feedback.textContent = message;
     document.body.appendChild(feedback);
     
     setTimeout(() => {
@@ -169,7 +204,7 @@ function HeadersViewer({ headers, title }) {
                 {title}
                 <button 
                     className="btn btn-sm btn-outline-primary"
-                    onClick={() => copyToClipboard(JSON.stringify(headers, null, 2))}
+                    onClick={() => copyToClipboard(stringifyPreservingOrder(headers))}
                     title="Copy all headers"
                 >
                     <i className="fas fa-copy"></i> All
@@ -222,7 +257,7 @@ function QueryParamsViewer({ queryParams, fullUrl, title }) {
                 {title}
                 <button 
                     className="btn btn-sm btn-outline-primary"
-                    onClick={() => copyToClipboard(JSON.stringify(queryParams, null, 2))}
+                    onClick={() => copyToClipboard(stringifyPreservingOrder(queryParams))}
                     title="Copy all query parameters"
                 >
                     <i className="fas fa-copy"></i> All
@@ -261,9 +296,70 @@ function QueryParamsViewer({ queryParams, fullUrl, title }) {
     );
 }
 
+// Custom JSON stringifier that preserves key order
+function stringifyPreservingOrder(obj, space = 2) {
+    if (obj === null || typeof obj !== 'object') {
+        return JSON.stringify(obj, null, space);
+    }
+    
+    if (Array.isArray(obj)) {
+        return '[\n' + obj.map(item => 
+            ' '.repeat(space) + stringifyPreservingOrder(item, space)
+        ).join(',\n') + '\n]';
+    }
+    
+    const entries = Object.entries(obj);
+    
+    if (entries.length === 0) {
+        return '{}';
+    }
+    
+    const result = '{\n' + entries.map(([key, value]) => {
+        const formattedValue = stringifyPreservingOrder(value, space + 2);
+        const line = ' '.repeat(space) + JSON.stringify(key) + ': ' + formattedValue;
+        return line;
+    }).join(',\n') + '\n' + ' '.repeat(space - 2) + '}';
+    
+    return result;
+}
+
+// Custom JSON parser that preserves key order
+function parsePreservingOrder(jsonString) {
+    if (typeof jsonString !== 'string') {
+        return jsonString;
+    }
+    
+    try {
+        // Use a Map to preserve insertion order, then convert to object
+        const map = new Map();
+        const parsed = JSON.parse(jsonString, (key, value) => {
+            if (key !== '') { // Skip the root object
+                map.set(key, value);
+            }
+            return value;
+        });
+        
+        // Convert Map back to object while preserving order
+        const result = {};
+        for (const [key, value] of map) {
+            result[key] = value;
+        }
+        
+        return result;
+    } catch (error) {
+        return jsonString;
+    }
+}
+
 // JSON Viewer Component
 function JsonViewer({ data, title }) {
-    if (!data || Object.keys(data).length === 0) {
+    // Parse the data if it's a string to preserve key order
+    let parsedData = data;
+    if (typeof data === 'string') {
+        parsedData = parsePreservingOrder(data);
+    }
+    
+    if (!parsedData || Object.keys(parsedData).length === 0) {
         return (
             <div className="card mb-3">
                 <div className="card-header">
@@ -276,13 +372,15 @@ function JsonViewer({ data, title }) {
         );
     }
     
+    const formattedData = stringifyPreservingOrder(parsedData);
+    
     return (
         <div className="card mb-3">
             <div className="card-header d-flex justify-content-between align-items-center">
                 {title}
                 <button 
                     className="btn btn-sm btn-outline-primary"
-                    onClick={() => copyToClipboard(JSON.stringify(data))}
+                    onClick={() => copyToClipboard(stringifyPreservingOrder(parsedData))}
                     title="Copy to clipboard"
                 >
                     <i className="fas fa-copy"></i>
@@ -290,7 +388,7 @@ function JsonViewer({ data, title }) {
             </div>
             <div className="card-body">
                 <div className="json-viewer">
-                    {JSON.stringify(data, null, 2)}
+                    {formattedData}
                 </div>
             </div>
         </div>
@@ -409,7 +507,9 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
                 setPreviousRequestCount(newSession.requests ? newSession.requests.length : 0);
                 setIsInitialLoad(false);
                 if (newSession.requests && newSession.requests.length > 0 && !selectedRequest) {
-                    setSelectedRequest(newSession.requests[0]);
+                    // Sort requests by timestamp (newest first) and select the first one
+                    const sortedRequests = [...newSession.requests].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    setSelectedRequest(sortedRequests[0]);
                 }
             }
         } catch (err) {
