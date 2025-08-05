@@ -101,7 +101,7 @@ class DatabaseManager:
     def get_session_requests(self, session_id, user_id=None):
         """Get all requests for a session (shared across all users who own the session)"""
         requests = self.requests_table.search(self.Query.session_id == session_id)
-        return sorted(requests, key=lambda x: x['timestamp'], reverse=True)
+        return requests
     
     def _limit_session_requests(self, session_id, limit):
         """Keep only the most recent requests for a session (shared across all users)"""
