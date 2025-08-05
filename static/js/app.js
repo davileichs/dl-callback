@@ -204,7 +204,7 @@ function HeadersViewer({ headers, title }) {
                 {title}
                 <button 
                     className="btn btn-sm btn-outline-primary"
-                    onClick={() => copyToClipboard(stringifyPreservingOrder(headers))}
+                    onClick={() => copyToClipboard(stringifyPreservingOrderCompact(headers))}
                     title="Copy all headers"
                 >
                     <i className="fas fa-copy"></i> All
@@ -257,7 +257,7 @@ function QueryParamsViewer({ queryParams, fullUrl, title }) {
                 {title}
                 <button 
                     className="btn btn-sm btn-outline-primary"
-                    onClick={() => copyToClipboard(stringifyPreservingOrder(queryParams))}
+                    onClick={() => copyToClipboard(stringifyPreservingOrderCompact(queryParams))}
                     title="Copy all query parameters"
                 >
                     <i className="fas fa-copy"></i> All
@@ -323,29 +323,66 @@ function stringifyPreservingOrder(obj, space = 2) {
     return result;
 }
 
-// Custom JSON parser that preserves key order
+// Custom JSON stringifier without indentation (for copying)
+function stringifyPreservingOrderCompact(obj) {
+    if (obj === null || typeof obj !== 'object') {
+        return JSON.stringify(obj);
+    }
+    
+    if (Array.isArray(obj)) {
+        return '[' + obj.map(item => stringifyPreservingOrderCompact(item)).join(',') + ']';
+    }
+    
+    const entries = Object.entries(obj);
+    
+    if (entries.length === 0) {
+        return '{}';
+    }
+    
+    const result = '{' + entries.map(([key, value]) => {
+        const formattedValue = stringifyPreservingOrderCompact(value);
+        return JSON.stringify(key) + ':' + formattedValue;
+    }).join(',') + '}';
+    
+    return result;
+}
+
+// Custom JSON parser that preserves key order for nested objects
 function parsePreservingOrder(jsonString) {
     if (typeof jsonString !== 'string') {
         return jsonString;
     }
     
     try {
-        // Use a Map to preserve insertion order, then convert to object
-        const map = new Map();
-        const parsed = JSON.parse(jsonString, (key, value) => {
-            if (key !== '') { // Skip the root object
-                map.set(key, value);
-            }
-            return value;
-        });
+        // Parse the JSON string normally first
+        const parsed = JSON.parse(jsonString);
         
-        // Convert Map back to object while preserving order
-        const result = {};
-        for (const [key, value] of map) {
-            result[key] = value;
+        // Recursively process nested objects to preserve key order
+        function preserveOrderRecursive(obj) {
+            if (obj === null || typeof obj !== 'object') {
+                return obj;
+            }
+            
+            if (Array.isArray(obj)) {
+                return obj.map(preserveOrderRecursive);
+            }
+            
+            // For objects, use Map to preserve insertion order
+            const map = new Map();
+            for (const [key, value] of Object.entries(obj)) {
+                map.set(key, preserveOrderRecursive(value));
+            }
+            
+            // Convert Map back to object while preserving order
+            const result = {};
+            for (const [key, value] of map) {
+                result[key] = value;
+            }
+            
+            return result;
         }
         
-        return result;
+        return preserveOrderRecursive(parsed);
     } catch (error) {
         return jsonString;
     }
@@ -380,7 +417,7 @@ function JsonViewer({ data, title }) {
                 {title}
                 <button 
                     className="btn btn-sm btn-outline-primary"
-                    onClick={() => copyToClipboard(stringifyPreservingOrder(parsedData))}
+                    onClick={() => copyToClipboard(stringifyPreservingOrderCompact(parsedData))}
                     title="Copy to clipboard"
                 >
                     <i className="fas fa-copy"></i>
