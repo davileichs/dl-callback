@@ -81,9 +81,14 @@ class DatabaseManager:
         if not session:
             return False
         
+        # Get the next insertion order number for this session
+        existing_requests = self.requests_table.search(self.Query.session_id == session_id)
+        next_order = len(existing_requests) + 1
+        
         # Add request data (without user_id for shared visibility)
         request_data['session_id'] = session_id
         request_data['timestamp'] = datetime.now().isoformat()
+        request_data['insertion_order'] = next_order
         
         self.requests_table.insert(request_data)
         
@@ -101,14 +106,15 @@ class DatabaseManager:
     def get_session_requests(self, session_id, user_id=None):
         """Get all requests for a session (shared across all users who own the session)"""
         requests = self.requests_table.search(self.Query.session_id == session_id)
-        return requests
+        # Sort by insertion order to maintain the exact order they were received
+        return sorted(requests, key=lambda x: x.get('insertion_order', 0))
     
     def _limit_session_requests(self, session_id, limit):
         """Keep only the most recent requests for a session (shared across all users)"""
         requests = self.requests_table.search(self.Query.session_id == session_id)
         if len(requests) > limit:
-            # Sort by timestamp and keep only the most recent
-            sorted_requests = sorted(requests, key=lambda x: x['timestamp'])
+            # Sort by insertion order and keep only the most recent
+            sorted_requests = sorted(requests, key=lambda x: x.get('insertion_order', 0))
             requests_to_delete = sorted_requests[:-limit]
             
             # Delete older requests
