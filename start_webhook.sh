@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Webhook Server Management Script
-# This script handles starting, stopping, restarting, and building the webhook server
-
 SCRIPT="webhook.py"
 LOG_FILE="logs/server.log"
 
@@ -165,6 +162,7 @@ show_status() {
     fi
 }
 
+
 # Function to show logs
 show_logs() {
     print_header "Server Logs"
@@ -253,3 +251,28 @@ case "${1:-start}" in
         exit 1
         ;;
 esac
+
+start_webhook() {
+    echo "Starting webhook server..."
+    pkill -f "$SCRIPT"
+    
+    sleep 2
+
+    nohup python3 "./$SCRIPT" >> logs/server.log 2>&1
+    
+    echo "Server started and running in background."
+}
+
+restart_webhook() {
+    echo "Restarting webhook Docker container..."
+    
+    docker-compose restart
+    
+    echo "Docker container restarted successfully."
+}
+
+if [ "$1" = "restart" ]; then
+    restart_webhook
+else
+    start_webhook
+fi
