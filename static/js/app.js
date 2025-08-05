@@ -71,6 +71,17 @@ const api = {
         return response.json();
     },
 
+    async proxyRedirect(sessionId, requestData) {
+        const response = await fetch(`/api/proxy-redirect/${sessionId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ request_data: requestData })
+        });
+        return response.json();
+    },
+
     async getSessionRequests(sessionId) {
         const response = await fetch(`/api/sessions/${sessionId}/requests`);
         return response.json();
@@ -432,6 +443,105 @@ function JsonViewer({ data, title }) {
     );
 }
 
+// Response Viewer Component - Intelligently handles different response types
+function ResponseViewer({ data, title, noCard = false }) {
+    // Function to check if a string is valid JSON
+    const isJsonString = (str) => {
+        if (typeof str !== 'string') return false;
+        try {
+            JSON.parse(str);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+    
+    // Function to check if data looks like JSON (starts with { or [)
+    const looksLikeJson = (str) => {
+        if (typeof str !== 'string') return false;
+        const trimmed = str.trim();
+        return trimmed.startsWith('{') || trimmed.startsWith('[');
+    };
+    
+    // Determine if we should treat this as JSON
+    const shouldFormatAsJson = (data) => {
+        if (typeof data === 'object' && data !== null) {
+            return true; // Already an object, format as JSON
+        }
+        if (typeof data === 'string') {
+            // Check if it's valid JSON or looks like JSON
+            return isJsonString(data) || looksLikeJson(data);
+        }
+        return false;
+    };
+    
+    if (!data) {
+        if (noCard) {
+            return <div className="text-muted">No response data available</div>;
+        }
+        return (
+            <div className="card mb-3">
+                <div className="card-header">
+                    {title}
+                </div>
+                <div className="card-body">
+                    <div className="text-muted">No response data available</div>
+                </div>
+            </div>
+        );
+    }
+    
+    // If it should be formatted as JSON, use JsonViewer
+    if (shouldFormatAsJson(data)) {
+        if (noCard) {
+            // For JSON data without card wrapper, just return the formatted content
+            const parsedData = typeof data === 'string' ? parsePreservingOrder(data) : data;
+            const formattedData = stringifyPreservingOrder(parsedData);
+            return (
+                <div className="response-text">
+                    <pre className="mb-0" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                        {formattedData}
+                    </pre>
+                </div>
+            );
+        }
+        return <JsonViewer data={data} title={title} />;
+    }
+    
+    // Otherwise, display as plain text
+    if (noCard) {
+        return (
+            <div className="response-text">
+                <pre className="mb-0" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {String(data)}
+                </pre>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="card mb-3">
+            <div className="card-header d-flex justify-content-between align-items-center">
+                {title}
+                <button 
+                    className="btn btn-sm btn-outline-primary"
+                    onClick={() => copyToClipboard(String(data))}
+                    title="Copy to clipboard"
+                >
+                    <i className="fas fa-copy"></i>
+                </button>
+            </div>
+            <div className="card-body">
+                <div className="response-text">
+                    <pre className="mb-0" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                        {String(data)}
+                    </pre>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // Request Item Component
 function RequestItem({ request }) {
     const formatTimestamp = (timestamp) => {
@@ -483,6 +593,8 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
     const [editingName, setEditingName] = useState(false);
     const [editingNameValue, setEditingNameValue] = useState('');
     const [requests, setRequests] = useState([]);
+    const [redirectResult, setRedirectResult] = useState(null);
+    const [showRedirectResult, setShowRedirectResult] = useState(false);
     
 
     
@@ -567,10 +679,6 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
             
             // Check if there are new requests
             if (currentRequestCount > previousRequestCount) {
-                const newRequestsCount = currentRequestCount - previousRequestCount;
-                
-
-                
                 // Update requests list (left menu only)
                 setRequests(newRequests);
                 
@@ -789,30 +897,23 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
                                             }
                                             
                                             try {
-                                                // Get redirect info from backend
-                                                const redirectInfo = await api.handleRedirect(sessionId, selectedRequest);
+                                                // Use server-side proxy to avoid CORS issues
+                                                const result = await api.proxyRedirect(sessionId, selectedRequest);
                                                 
-                                                if (redirectInfo.redirect_url) {
-                                                    // Use JavaScript redirect manager to forward the request
-                                                    const result = await window.redirectManager.forwardRequestToRedirectUrl(
-                                                        redirectInfo.redirect_url, 
-                                                        redirectInfo.request_data
-                                                    );
-                                                    
-                                                    if (result.success) {
-                                                        alert(`Redirect successful! Status: ${result.status_code}`);
-                                                    } else {
-                                                        alert(`Redirect failed: ${result.error || 'Unknown error'}`);
-                                                    }
-                                                }
+                                                setRedirectResult(result);
+                                                setShowRedirectResult(true);
                                             } catch (err) {
-                                                console.error('Failed to test redirect:', err);
-                                                alert('Failed to test redirect: ' + err.message);
+                                                console.error('Failed to send redirect:', err);
+                                                setRedirectResult({
+                                                    success: false,
+                                                    error: 'Failed to send redirect: ' + err.message
+                                                });
+                                                setShowRedirectResult(true);
                                             }
                                         }}
                                         disabled={!session.redirect_url || !selectedRequest}
                                     >
-                                        <i className="fas fa-paper-plane"></i> Test
+                                        <i className="fas fa-paper-plane"></i> Send
                                     </button>
                                 </div>
                             </div>
@@ -821,7 +922,78 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
                 </div>
             </div>
             
-
+            {/* Redirect Result Popup */}
+            {showRedirectResult && redirectResult && (
+                <div className="modal-overlay" style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    zIndex: 9999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    <div className="modal-content" style={{
+                        backgroundColor: '#033a42',
+                        border: '1px solid #055a64',
+                        borderRadius: '0.5rem',
+                        maxWidth: '80%',
+                        maxHeight: '80%',
+                        width: '600px',
+                        overflow: 'hidden',
+                        boxShadow: '0 0.5rem 1rem rgba(0, 0, 0, 0.3)'
+                    }}>
+                        <div className="modal-header" style={{
+                            padding: '1rem',
+                            borderBottom: '1px solid #055a64',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <h6 className="mb-0" style={{ color: 'white' }}>
+                                <i className={`fas ${redirectResult.success ? 'fa-check-circle text-success' : 'fa-exclamation-circle text-danger'}`}></i>
+                                Redirect Response
+                            </h6>
+                            <button 
+                                className="btn btn-sm btn-outline-secondary"
+                                onClick={() => setShowRedirectResult(false)}
+                                style={{ border: '1px solid #055a64', color: '#b0b0b0' }}
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div className="modal-body" style={{
+                            padding: '1rem',
+                            maxHeight: '400px',
+                            overflow: 'auto'
+                        }}>
+                            {redirectResult.success && redirectResult.response_text ? (
+                                <div className="response-text">
+                                    <pre className="mb-0" style={{ 
+                                        whiteSpace: 'pre-wrap', 
+                                        wordBreak: 'break-word', 
+                                        fontSize: '0.875rem',
+                                        color: '#e0e0e0',
+                                        backgroundColor: '#011a1f',
+                                        padding: '1rem',
+                                        borderRadius: '0.375rem',
+                                        border: '1px solid #055a64'
+                                    }}>
+                                        {redirectResult.response_text}
+                                    </pre>
+                                </div>
+                            ) : (
+                                <div className="text-danger">
+                                    {redirectResult.error || 'No response data'}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
             
             {/* Three-Panel Layout */}
             <div className="session-panels">

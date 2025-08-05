@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template, session, redirect, s
 from flask_cors import CORS
 import json
 import uuid
+import requests
 
 from datetime import datetime
 import os
@@ -330,6 +331,131 @@ def handle_redirect(session_id):
         'session_id': session_id
     })
 
+@app.route('/api/proxy-redirect/<session_id>', methods=['POST'])
+def proxy_redirect(session_id):
+    """Server-side proxy to handle redirects and avoid CORS issues"""
+    user_id = user_manager.get_user_id()
+    session_data = db.get_session(session_id, user_id)
+    
+    if not session_data:
+        return jsonify({'error': 'Session not found'}), 404
+    
+    redirect_url = session_data.get('redirect_url')
+    if not redirect_url:
+        return jsonify({'error': 'No redirect URL configured'}), 400
+    
+    # Get request data from the request body
+    data = request.get_json()
+    if not data or 'request_data' not in data:
+        return jsonify({'error': 'Request data is required'}), 400
+    
+    request_data = data['request_data']
+    
+    try:
+        # Get the original method from request data
+        original_method = (request_data.get('method', 'POST')).upper()
+        
+        # Get original headers (excluding some that shouldn't be forwarded)
+        original_headers = request_data.get('headers', {})
+        headers = {}
+        
+        for key, value in original_headers.items():
+            # Skip headers that shouldn't be forwarded
+            if key.lower() not in ['host', 'content-length', 'connection', 'accept-encoding']:
+                headers[key] = value
+        
+        # Handle query parameters
+        original_query_params = request_data.get('query_params', {})
+        final_url = redirect_url
+        
+        if original_query_params:
+            # Add query parameters to URL
+            from urllib.parse import urlencode
+            query_string = urlencode(original_query_params)
+            separator = '&' if '?' in final_url else '?'
+            final_url = f"{final_url}{separator}{query_string}"
+        
+        # Prepare request options
+        request_options = {
+            'headers': headers,
+            'timeout': 10  # 10 seconds timeout
+        }
+        
+        # Handle different HTTP methods
+        if original_method == 'GET':
+            response = requests.get(final_url, **request_options)
+        elif original_method == 'POST':
+            # Handle payload
+            payload = request_data.get('payload')
+            if payload is not None:
+                if isinstance(payload, dict):
+                    request_options['json'] = payload
+                elif isinstance(payload, str):
+                    # Send string payload as raw data without JSON parsing
+                    request_options['data'] = payload
+                else:
+                    request_options['data'] = str(payload)
+            response = requests.post(final_url, **request_options)
+        elif original_method == 'PUT':
+            payload = request_data.get('payload')
+            if payload is not None:
+                if isinstance(payload, dict):
+                    request_options['json'] = payload
+                elif isinstance(payload, str):
+                    # Send string payload as raw data without JSON parsing
+                    request_options['data'] = payload
+                else:
+                    request_options['data'] = str(payload)
+            response = requests.put(final_url, **request_options)
+        elif original_method == 'PATCH':
+            payload = request_data.get('payload')
+            if payload is not None:
+                if isinstance(payload, dict):
+                    request_options['json'] = payload
+                elif isinstance(payload, str):
+                    # Send string payload as raw data without JSON parsing
+                    request_options['data'] = payload
+                else:
+                    request_options['data'] = str(payload)
+            response = requests.patch(final_url, **request_options)
+        elif original_method == 'DELETE':
+            response = requests.delete(final_url, **request_options)
+        elif original_method == 'OPTIONS':
+            response = requests.options(final_url, **request_options)
+        else:
+            # Default to POST
+            payload = request_data.get('payload')
+            if payload is not None:
+                if isinstance(payload, dict):
+                    request_options['json'] = payload
+                elif isinstance(payload, str):
+                    # Send string payload as raw data without JSON parsing
+                    request_options['data'] = payload
+                else:
+                    request_options['data'] = str(payload)
+            response = requests.post(final_url, **request_options)
+        
+        # Process response
+        try:
+            response_text = response.text  # Get full response text
+        except:
+            response_text = "Unable to read response text"
+        
+        return jsonify({
+            'status_code': response.status_code,
+            'response_text': response_text,
+            'success': response.status_code < 400,
+            'method_used': original_method,
+            'redirect_url': final_url,
+            'response_headers': dict(response.headers)
+        })
+        
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            'error': str(e),
+            'success': False,
+            'method_used': request_data.get('method', 'POST')
+        }), 500
 
 
 if __name__ == '__main__':
