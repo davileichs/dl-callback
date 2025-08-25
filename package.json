@@ -1,0 +1,33 @@
+{
+  "name": "dlcallback",
+  "version": "1.0.0",
+  "description": "Webhook Callback Viewer with Playwright testing",
+  "main": "webhook.py",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report",
+    "test:install": "playwright install",
+    "test:codegen": "playwright codegen",
+    "test:update": "playwright test --update-snapshots"
+  },
+  "dependencies": {
+    "@playwright/mcp": "^0.0.35",
+    "playwright": "^1.55.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  },
+  "keywords": [
+    "webhook",
+    "callback",
+    "testing",
+    "playwright",
+    "flask",
+    "react"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,7 +1,7 @@
 // Redirect functionality using JavaScript
 class RedirectManager {
     constructor() {
-        this.timeout = 10000; // 10 seconds timeout
+        // No timeout restrictions - let the browser handle it naturally
     }
 
     /**
@@ -12,6 +12,9 @@ class RedirectManager {
      */
     async forwardRequestToRedirectUrl(redirectUrl, requestData) {
         try {
+            console.log('Redirecting to:', redirectUrl);
+            console.log('Request data:', requestData);
+            
             // Get the original method from request data
             const originalMethod = (requestData.method || 'POST').toUpperCase();
             
@@ -25,8 +28,8 @@ class RedirectManager {
                     headers[key] = value;
                 }
             }
-
-            // Handle query parameters for ALL methods (not just GET)
+            
+            // Handle query parameters for ALL methods
             const originalQueryParams = requestData.query_params || {};
             let finalUrl = redirectUrl;
             
@@ -42,71 +45,85 @@ class RedirectManager {
             }
 
             // Prepare fetch options
-            const fetchOptions = {
-                method: originalMethod,
-                headers: headers
-            };
+            const fetchOptions = this.prepareFetchOptions(originalMethod, headers, requestData, finalUrl);
 
-            // Handle different HTTP methods
-            if (originalMethod === 'GET') {
-                // GET requests don't have a body
-                const response = await fetch(finalUrl, fetchOptions);
-                return this.processResponse(response, originalMethod);
-                
-            } else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(originalMethod)) {
-                // For other methods, forward original payload
-                const originalPayload = requestData.payload;
-                
-                if (originalPayload !== undefined && originalPayload !== null) {
-                    if (typeof originalPayload === 'object') {
-                        fetchOptions.body = JSON.stringify(originalPayload);
-                        // Set content-type if not already set
-                        if (!headers['Content-Type'] && !headers['content-type']) {
-                            headers['Content-Type'] = 'application/json';
-                        }
-                    } else {
-                        fetchOptions.body = originalPayload;
-                        // For string payloads, set content-type if not already set
-                        if (!headers['Content-Type'] && !headers['content-type']) {
-                            headers['Content-Type'] = 'text/plain';
-                        }
-                    }
-                }
-                
-                const response = await fetch(finalUrl, fetchOptions);
-                return this.processResponse(response, originalMethod);
-                
-            } else if (originalMethod === 'OPTIONS') {
-                const response = await fetch(finalUrl, fetchOptions);
-                return this.processResponse(response, originalMethod);
-                
-            } else {
-                // Default to POST
-                const originalPayload = requestData.payload;
-                if (originalPayload !== undefined && originalPayload !== null) {
-                    if (typeof originalPayload === 'object') {
-                        fetchOptions.body = JSON.stringify(originalPayload);
-                        if (!headers['Content-Type'] && !headers['content-type']) {
-                            headers['Content-Type'] = 'application/json';
-                        }
-                    } else {
-                        fetchOptions.body = originalPayload;
-                        if (!headers['Content-Type'] && !headers['content-type']) {
-                            headers['Content-Type'] = 'text/plain';
-                        }
-                    }
-                }
-                
-                const response = await fetch(finalUrl, fetchOptions);
-                return this.processResponse(response, 'POST');
-            }
+            // Make the request - no special handling, just redirect to whatever URL the user wants
+            const response = await fetch(finalUrl, fetchOptions);
+            return this.processResponse(response, originalMethod);
             
         } catch (error) {
+            console.error('Redirect error:', error);
             return {
                 error: error.message,
                 success: false,
                 method_used: requestData.method || 'POST'
             };
+        }
+    }
+
+    /**
+     * Prepare fetch options for the request
+     * @param {string} method - HTTP method
+     * @param {Object} headers - Request headers
+     * @param {Object} requestData - Original request data
+     * @param {string} url - Final URL
+     * @returns {Object} - Fetch options
+     */
+    prepareFetchOptions(method, headers, requestData, url) {
+        const fetchOptions = {
+            method: method,
+            headers: headers
+        };
+
+        // Handle different HTTP methods
+        if (method === 'GET') {
+            // GET requests don't have a body
+            return fetchOptions;
+            
+        } else if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+            // For other methods, forward original payload
+            const originalPayload = requestData.payload;
+            
+            if (originalPayload !== undefined && originalPayload !== null) {
+                if (typeof originalPayload === 'object') {
+                    fetchOptions.body = JSON.stringify(originalPayload);
+                    // Set content-type if not already set
+                    if (!headers['Content-Type'] && !headers['content-type']) {
+                        headers['Content-Type'] = 'application/json';
+                    }
+                } else {
+                    fetchOptions.body = originalPayload;
+                    // For string payloads, set content-type if not already set
+                    if (!headers['Content-Type'] && !headers['content-type']) {
+                        headers['Content-Type'] = 'text/plain';
+                    }
+                }
+            }
+            
+            return fetchOptions;
+            
+        } else if (method === 'OPTIONS') {
+            return fetchOptions;
+            
+        } else {
+            // Default to POST
+            const originalPayload = requestData.payload;
+            if (originalPayload !== undefined && originalPayload !== null) {
+                if (typeof originalPayload === 'object') {
+                    fetchOptions.body = JSON.stringify(originalPayload);
+                    if (!headers['Content-Type'] && !headers['content-type']) {
+                        headers['Content-Type'] = 'application/json';
+                    }
+                } else {
+                    fetchOptions.body = originalPayload;
+                    if (!headers['Content-Type'] && !headers['content-type']) {
+                        headers['Content-Type'] = 'text/plain';
+                    }
+                }
+            }
+            
+            fetchOptions.method = 'POST';
+            return fetchOptions;
         }
     }
 
@@ -142,9 +159,10 @@ class RedirectManager {
      */
     async testRedirectUrl(redirectUrl) {
         try {
+            console.log('Testing redirect URL:', redirectUrl);
+            
             const response = await fetch(redirectUrl, {
-                method: 'OPTIONS',
-                timeout: 5000
+                method: 'OPTIONS'
             });
             
             return {
@@ -153,6 +171,7 @@ class RedirectManager {
                 accessible: response.status < 400
             };
         } catch (error) {
+            console.error('URL test failed:', error);
             return {
                 success: false,
                 error: error.message,

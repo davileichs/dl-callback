@@ -545,7 +545,15 @@ function ResponseViewer({ data, title, noCard = false }) {
 // Request Item Component
 function RequestItem({ request }) {
     const formatTimestamp = (timestamp) => {
-        return new Date(timestamp).toLocaleString();
+        return new Date(timestamp).toLocaleString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
     };
     
     return (
@@ -813,7 +821,11 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
                                 </h5>
                             )}
                             <small className="text-muted">
-                                {(requests || []).length} requests • Created {new Date(session.created_at).toLocaleDateString()}
+                                {(requests || []).length} requests • Created {new Date(session.created_at).toLocaleDateString('en-GB', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric'
+                                })}
                             </small>
                         </div>
                     </div>
@@ -1087,7 +1099,11 @@ function SessionDetail({ sessionId, onBack, onNameUpdate }) {
                                         <div className="session-name">{session.name}</div>
                                         <div className="session-info">
                                             <small>{session.request_count} requests</small>
-                                            <small>{new Date(session.last_updated).toLocaleDateString()}</small>
+                                            <small>{new Date(session.last_updated).toLocaleDateString('en-GB', {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                year: 'numeric'
+                                            })}</small>
                                         </div>
                                     </div>
                                 ))
@@ -1230,7 +1246,15 @@ function SessionList({ onSessionSelect }) {
                                     </div>
                                     <p className="card-text">
                                         <small className="text-muted">
-                                            <i className="fas fa-clock"></i> Created: {new Date(session.created_at).toLocaleString()}
+                                            <i className="fas fa-clock"></i> Created: {new Date(session.created_at).toLocaleString('en-GB', {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                                hour12: false
+                                            })}
                                         </small>
                                     </p>
                                     <p className="card-text">
@@ -1240,7 +1264,15 @@ function SessionList({ onSessionSelect }) {
                                     </p>
                                     <p className="card-text">
                                         <small className="text-muted">
-                                            <i className="fas fa-sync"></i> Updated: {new Date(session.last_updated).toLocaleString()}
+                                            <i className="fas fa-sync"></i> Updated: {new Date(session.last_updated).toLocaleString('en-GB', {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                                hour12: false
+                                            })}
                                         </small>
                                     </p>
                                 </div>

@@ -62,3 +62,22 @@ logs/
 # Backup files
 *.backup.*
 app.js.backup.*
+
+# Node.js / npm files
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+.npm
+.eslintcache
+
+# Playwright test results and reports
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Test files
+tests/
+*.spec.js
+*.test.js
